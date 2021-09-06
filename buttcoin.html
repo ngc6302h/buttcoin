@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Buttcoin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KyZXEAg3QhqLMpG8r+8fhAXLRk2vvoC2f3B09zVXn8CA5QIVfZOJ3BCsw2P0p/We" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/buttplug@1.0.14/dist/web/buttplug.min.js"></script>
+    <script>
+        async function initialize(listener)
+        {
+            await Buttplug.buttplugInit();
+        }
+        initialize();
+    </script>
+</head>
+<body>
+<script>
+    var devices = [];
+    async function connect()
+    {
+        const connector = new Buttplug.ButtplugEmbeddedConnectorOptions();
+        const client = new Buttplug.ButtplugClient("Default client");
+        try {
+            await client.connect(connector);
+        } catch (e) {
+            console.log(e);
+            if (e instanceof Buttplug.ButtplugError) {
+                console.log("this is a buttplug error");
+                if (e instanceof Buttplug.ButtplugClientConnectorError) {
+                    console.log("This is a connector error");
+                }
+            }
+        }
+
+        console.log("Client connected");
+
+        client.addListener("deviceadded", async (device) => {
+            console.log(`Device Connected: ${device.Name}`);
+            console.log("Client currently knows about these devices:");
+            client.Devices.forEach((device) => console.log(`- ${device.Name}`));
+
+            if (!device.messageAttributes(Buttplug.ButtplugDeviceMessageType.VibrateCmd)) {
+                return;
+            }
+
+            try {
+                await device.vibrate(0.5);
+            } catch (e) {
+                console.log(e);
+                if (e instanceof Buttplug.ButtplugDeviceError) {
+                    console.log("got a device error!");
+                }
+            }
+            await new Promise(r => setTimeout(r, 1000));
+            await device.stop();
+            devices.push(device);
+        });
+
+        client
+            .addListener("deviceremoved", (device) => console.log(`Device Removed: ${device.Name}`));
+
+        // Now that everything is set up, we can scan.
+        await client.startScanning();
+    }
+
+    async function vibrate()
+    {
+        let socket = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@kline_1m");
+        socket.onmessage = function (event)
+        {
+            const msg = JSON.parse(event.data);
+            for (let i = 0; i < devices.length; i++)
+            {
+                const intensity = Math.max(0.01, Math.min(Math.abs((msg.k.o - msg.k.c) / document.getElementById("sensitivity").value), 1));
+                document.getElementById("intensity_label").textContent = intensity.toString();
+                devices[i].vibrate(intensity);
+            }
+        }
+    }
+</script>
+<h1 style="text-align: center">Bitcoin volatity tracker</h1>
+<div style="text-align: center" class="container-fluid">
+    <div class="row">
+        <div class="col">
+            <button type="button" class="btn btn-primary" onclick="connect()">Connect to toy</button>
+            <button type="button" class="btn btn-primary" onclick="vibrate()">Start</button>
+        </div>
+    </div>
+    <div class="row" style="padding: 10px">
+        <div class="col">
+            Current intensity: <input type="number" id="sensitivity" value="110"></input>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            Current intensity: <span id="intensity_label">?</span>
+        </div>
+    </div>
+</div>
+</body>
+</html>
